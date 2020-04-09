@@ -1,5 +1,8 @@
 import os
 import numpy as np
+import os, fnmatch
+import sys
+import re
 
 dataDir = '/u/cs401/A3/data/'
 
@@ -96,6 +99,11 @@ def backTrace(B_matrix, n, m):
 
     return (subs, ins, dels)
 
+def preproc(text):
+    clean_text = text.split(" ", 2)[2].strip()
+    clean_text = text.lower()
+    clean_text = re.sub(r'[!"#\$%&\'\(\)\*\+,\-\./:;<=>\?@\\\^_`{\|}~/]', "", clean_text)
+    return clean_text
 
 if __name__ == "__main__":
 
@@ -103,8 +111,53 @@ if __name__ == "__main__":
     print(Levenshtein("who is there".split(), "".split()))
     print(Levenshtein("".split(), "who is there".split()))
     print(Levenshtein("how to recognize speech".split(), "how to wreck a nice beach".split()))
-
+    kald_WERs = []
+    goog_WERs = []
+    sys.stdout = open("asrDiscussion.txt", "w")
     for subdir, dirs, files in os.walk(dataDir):
         for speaker in dirs:
             print(speaker)
             files = fnmatch.filter(os.listdir(os.path.join(dataDir, speaker)), "*txt")
+
+            #Read Files
+            for file in files:
+                with open(os.path.join(dataDir, speaker, file), 'r') as f:
+                    if file == "transcripts.txt":
+                        tran = f.readlines()
+                    elif file == "transcripts.Google.txt":
+                        goog = f.readlines()
+                    elif file == "transcripts.Kaldi.txt":
+                        kald = f.readlines()
+
+            if len(tran) == 0 or len(goog) == 0 or len(kald) == 0:
+                continue
+
+            for idx in range(len(tran)):
+                tran_clean = preproc(tran[idx])
+                goog_clean = preproc(goog[idx])
+                kald_clean = preproc(kald[idx])
+                goog_score = Levenshtein(tran_clean.split(), goog_clean.split())
+                kald_score = Levenshtein(tran_clean.split(), kald_clean.split())
+                print("{} {} {} {} S:{}, I:{}, D:{}".format(speaker,
+                                                            'Google',
+                                                            idx,
+                                                            goog_score[0],
+                                                            goog_score[1],
+                                                            goog_score[2],
+                                                            goog_score[3]))
+
+                print("{} {} {} {} S:{}, I:{}, D:{}".format(speaker,
+                                                            'Kaldi',
+                                                            idx,
+                                                            kald_score[0],
+                                                            kald_score[1],
+                                                            kald_score[2],
+                                                            kald_score[3]))
+                kald_WERs.append(kald_score[0])
+                goog_WERs.append(goog_score[0])
+
+    kald_WERs = np.asarray(kald_WERs)
+    goog_WERs = np.asarray(goog_WERs)
+    print("Kaldi    mean:{}, std:{}".format(np.mean(kald_WERs), np.std(kald_WERs)))
+    print("Google   mean:{}, std:{}".format(np.mean(goog_WERs), np.std(goog_WERs)))
+
